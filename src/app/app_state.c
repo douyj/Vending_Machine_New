@@ -2,6 +2,7 @@
 
 #include "pthread.h"
 #include "app/app_state.h"
+#include "log/log.h"
 
 static app_state_t g_app_state = APP_STATE_INIT;
 static pthread_mutex_t g_state_mutex = PTHREAD_MUTEX_INITIALIZER;

@@ -1,0 +1,35 @@
+# Build outputs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Binaries and object files
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+Vending_Machine
+vending_machine
+
+# Logs and runtime files
+*.log
+*.tmp
+*.bak
+core
+core.*
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
