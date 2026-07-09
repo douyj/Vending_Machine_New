@@ -5,7 +5,9 @@
 #include "member/member_manager.h"
 #include "order/order_manager.h"
 #include "order/order_state.h"
-
+#include "device/door_manager.h"
+#include "device/door_state.h"
+#include "storage/storage_manager.h"
 
 int main(void)
 {
@@ -14,27 +16,24 @@ int main(void)
 
     memset(&order, 0, sizeof(order));
 
-    product_manager_init();
-    member_manager_init();
-    order_manager_init();
-    member_mock_login();
+       product_manager_init();
+       member_manager_init();
+       order_manager_init();
+       door_manager_init();
 
-    printf("before buy:\n");
-    product_printf_all();
+       storage_manager_init("vending_machine.db");
+       storage_create_tables();
 
-    ret = order_process_buy(1, 5, &order);
+       member_mock_login();
+       door_open("member_login_success");
 
-    printf("ret=%d\n", ret);
-    printf("order_id=%s\n", order.order_id);
-    printf("product=%s\n", order.product_name);
-    printf("count=%d\n", order.product_count);
-    printf("total=%.2f\n", order.total_price);
-    printf("balance before=%.2f\n", order.balance_before_pay);
-    printf("balance after=%.2f\n", order.balance_after_pay);
-    printf("state=%s\n", order_state_to_string(order.state));
+       ret = order_process_buy(1, 5, &order);
+       if (ret == ORDER_ERR_OK) {
+       storage_insert_order(&order);
+       door_close("order_done");
+       }
 
-    printf("after buy:\n");
-    product_printf_all();
+       storage_close();
 
     return 0;
 }

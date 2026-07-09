@@ -13,8 +13,11 @@ add_executable(Vending_Machine
     src/member/member_manager.c
     src/order/order_manager.c
     src/order/order_state.c
+    src/device/door_manager.c
+    src/device/door_state.c
+    src/storage/storage_manager.c
     src/app/app_state.c
     src/app/app_main.c
 )
 
-target_link_libraries(Vending_Machine pthread)
+target_link_libraries(Vending_Machine pthread sqlite3)
