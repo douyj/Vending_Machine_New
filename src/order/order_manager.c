@@ -2,6 +2,7 @@
 #include "order/order_state.h"
 
 #include "product/product_manager.h"
+#include "storage/storage_manager.h"
 #include "member/member_manager.h"
 
 #include "log/log.h"
@@ -416,6 +417,8 @@ int order_finish(order_info_t *order)
      * upload_status = 0 表示订单已完成，但还未上传后台。
      */
     order->upload_status = 0;
+
+    storage_insert_order(order);   //将订单写入数据库
 
     LOG_INFO("order finish success, order_id: %s, member_id: %d, product_id: %d, count: %d, total_price: %.2f, balance_before: %.2f, balance_after: %.2f, state: %s",
              order->order_id,

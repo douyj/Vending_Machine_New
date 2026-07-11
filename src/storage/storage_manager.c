@@ -167,6 +167,85 @@ int storage_insert_order(const order_info_t *order)
 }
 
 /*
+    @brief 加载最近订单
+    @param out_orders 输出订单数组
+    @param max_count 最大订单数
+    @return 存储错误码
+    @note 从订单表中加载最近订单
+*/
+int storage_load_recent_orders(order_info_t *out_orders, int max_count)
+{
+    sqlite3_stmt *stmt = NULL;
+    const unsigned char *text = NULL;
+    int count = 0;
+
+    const char *sql =
+        "SELECT order_id, member_id, member_name, product_id, product_name, "
+        "product_count, unit_price, total_price, "
+        "balance_before_pay, balance_after_pay, "
+        "order_state, upload_status, create_time "
+        "FROM orders "
+        "ORDER BY create_time DESC, id DESC "
+        "LIMIT ?;";
+
+    if (out_orders == NULL || max_count <= 0) {
+        return STORAGE_ERR_INVALID_PARAM;
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        LOG_ERROR("prepare load recent orders failed: %s", sqlite3_errmsg(g_db));
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    sqlite3_bind_int(stmt, 1, max_count);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW && count < max_count) {
+        order_info_t *order = &out_orders[count];
+
+        memset(order, 0, sizeof(order_info_t));
+
+        text = sqlite3_column_text(stmt, 0);
+        snprintf(order->order_id, sizeof(order->order_id), "%s",
+                 text ? (const char *)text : "");
+
+        order->member_id = sqlite3_column_int(stmt, 1);
+
+        text = sqlite3_column_text(stmt, 2);
+        snprintf(order->member_name, sizeof(order->member_name), "%s",
+                 text ? (const char *)text : "");
+
+        order->product_id = sqlite3_column_int(stmt, 3);
+
+        text = sqlite3_column_text(stmt, 4);
+        snprintf(order->product_name, sizeof(order->product_name), "%s",
+                 text ? (const char *)text : "");
+
+        order->product_count = sqlite3_column_int(stmt, 5);
+        order->unit_price = sqlite3_column_double(stmt, 6);
+        order->total_price = sqlite3_column_double(stmt, 7);
+        order->balance_before_pay = sqlite3_column_double(stmt, 8);
+        order->balance_after_pay = sqlite3_column_double(stmt, 9);
+
+        /*
+         * 这里先简单处理：数据库里存的是状态字符串。
+         * UI 查询时主要显示文字，不强依赖 enum。
+         * 如果后面要严格恢复 enum，可以写 order_state_from_string()。
+         */
+        order->state = ORDER_STATE_DONE;
+
+        order->upload_status = sqlite3_column_int(stmt, 11);
+        order->create_time = sqlite3_column_int64(stmt, 12);
+
+        count++;
+    }
+
+    sqlite3_finalize(stmt);
+
+    return count;
+}
+
+
+/*
     @brief 插入或更新商品信息
     @param product 商品信息
     @return 存储错误码
@@ -305,6 +384,16 @@ int storage_load_product(int product_id, product_info_t *out_product)
     return STORAGE_ERR_OK;
 }
 
+
+
+
+
+
+/*
+    @brief 存储错误码转字符串
+    @param err 错误码
+    @return 错误码字符串
+*/
 const char *storage_error_to_string(int err)
 {
     switch (err) {

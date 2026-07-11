@@ -6,7 +6,9 @@
 #include <string.h>
 
 #include "chinese/ui_fonts.h"
+#include "member/member_manager.h"
 #include "product/product_manager.h"
+#include "ui/ui_order/ui_order_page.h"
 #include "ui/ui_shopping_car/ui_shopping_car_page.h"
 
 #define UI_SHOPPING_SCREEN_W        800
@@ -34,6 +36,7 @@ static int quantities[PRODUCT_MANAGER_PRODUCT_COUNT];
 static int product_count;
 static lv_obj_t *product_grid;
 static lv_obj_t *total_price_label;
+static lv_obj_t *balance_label;
 static shopping_category_t selected_category = SHOPPING_CATEGORY_ALL;
 
 /*
@@ -207,6 +210,24 @@ static void update_total_price_label(void)
 
     snprintf(total_text, sizeof(total_text), "总价 %.2f元", calc_cart_total_price());
     lv_label_set_text(total_price_label, total_text);
+}
+
+static void update_balance_label(void)
+{
+    char balance_text[32];
+    double balance = 0.0;
+
+    if (balance_label == NULL) {
+        return;
+    }
+
+    if (member_get_balance(&balance) == MEMBER_ERR_OK) {
+        snprintf(balance_text, sizeof(balance_text), "余额 %.2f元", balance);
+    } else {
+        snprintf(balance_text, sizeof(balance_text), "余额 --");
+    }
+
+    lv_label_set_text(balance_label, balance_text);
 }
 
 /*
@@ -475,6 +496,15 @@ static void cart_btn_event_cb(lv_event_t *event)
     ui_shopping_car_page_load();
 }
 
+static void order_btn_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    ui_order_page_load();
+}
+
 /*
     @brief 创建顶部导航栏
     @param parent 父对象
@@ -496,6 +526,10 @@ static void create_top_bar(lv_obj_t *parent)
     lv_obj_t *title = create_label(top_bar, "会员购物",
                                    ui_font_zh_16(), lv_color_hex(0xFFFFFF));
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 0, 0);
+
+    balance_label = create_label(top_bar, "余额 --",
+                                 ui_font_zh_16(), lv_color_hex(0xFFFFFF));
+    lv_obj_align_to(balance_label, title, LV_ALIGN_OUT_RIGHT_MID, 22, 0);
 
     lv_obj_t *cart_btn = lv_btn_create(top_bar);
     lv_obj_set_size(cart_btn, 112, 38);
@@ -529,9 +563,28 @@ static void create_top_bar(lv_obj_t *parent)
                                         ui_font_zh_16(), lv_color_hex(0xFFFFFF));
     lv_obj_align(cart_label, LV_ALIGN_RIGHT_MID, -12, 0);
 
+    lv_obj_t *order_btn = lv_btn_create(top_bar);
+    lv_obj_set_size(order_btn, 74, 38);
+    lv_obj_align_to(order_btn, cart_btn, LV_ALIGN_OUT_LEFT_MID, -10, 0);
+    lv_obj_clear_flag(order_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(order_btn, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_opa(order_btn, LV_OPA_20, 0);
+    lv_obj_set_style_radius(order_btn, 19, 0);
+    lv_obj_set_style_border_color(order_btn, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_border_opa(order_btn, LV_OPA_50, 0);
+    lv_obj_set_style_border_width(order_btn, 1, 0);
+    lv_obj_set_style_shadow_width(order_btn, 0, 0);
+    lv_obj_set_style_pad_all(order_btn, 0, 0);
+    lv_obj_add_event_cb(order_btn, order_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *order_label = create_label(order_btn, "订单",
+                                         ui_font_zh_16(),
+                                         lv_color_hex(0xFFFFFF));
+    lv_obj_center(order_label);
+
     total_price_label = create_label(top_bar, "总价 0.00元",
                                      ui_font_zh_16(), lv_color_hex(0xFFFFFF));
-    lv_obj_align_to(total_price_label, cart_btn, LV_ALIGN_OUT_LEFT_MID, -18, 0);
+    lv_obj_align_to(total_price_label, order_btn, LV_ALIGN_OUT_LEFT_MID, -18, 0);
 }
 
 /*
@@ -636,10 +689,12 @@ lv_obj_t *ui_shopping_page_create(void)
     selected_category = SHOPPING_CATEGORY_ALL;
     product_grid = NULL;
     total_price_label = NULL;
+    balance_label = NULL;
     load_products();
 
     create_top_bar(screen);
     update_total_price_label();
+    update_balance_label();
     create_category_bar(screen);
     create_product_area(screen);
 

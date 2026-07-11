@@ -32,6 +32,7 @@ add_executable(Vending_Machine
     src/app/app_main.c
     src/ui/ui_login/ui_login_page.c
     src/ui/ui_login/ui_register_page.c
+    src/ui/ui_order/ui_order_page.c
     src/ui/ui_shopping/ui_shopping_page.c
     src/ui/ui_shopping_car/ui_shopping_car_page.c
     src/chinese/font_chinese_12.c

@@ -3,6 +3,7 @@
 #include <pthread.h>
 
 #include "product/product_manager.h"
+#include "storage/storage_manager.h"
 #include "log/log.h"
 
 static int g_product_count = 0;
@@ -97,6 +98,18 @@ void product_manager_init(void)
     g_products[11].product_category = PRODUCT_CATEGORY_OTHERS;
 
     g_product_count = PRODUCT_MANAGER_PRODUCT_COUNT;
+
+    //从数据库中加载商品信息
+    for(int i=0; i<g_product_count; i++)
+    {
+        product_info_t stored_product;
+        if(storage_load_product(g_products[i].product_id, &stored_product) == STORAGE_ERR_OK)
+        {
+            g_products[i] = stored_product;
+        }else{
+            storage_insert_or_update_product(&g_products[i]);
+        }
+    }
 
     pthread_mutex_unlock(&g_product_mutex);
 
@@ -264,6 +277,7 @@ int product_manager_sub_stock(int product_id, int count)
             }
 
             g_products[i].product_stock -= count;
+            storage_insert_or_update_product(&g_products[i]);   //更新商品库存
             LOG_INFO("sub stock success, product_id=%d, sub=%d, stock=%d",
                      product_id, count, g_products[i].product_stock);
             pthread_mutex_unlock(&g_product_mutex);

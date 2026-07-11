@@ -23,6 +23,9 @@ int storage_insert_or_update_product(const product_info_t *product);
 int storage_update_product_stock(int product_id, int stock);
 int storage_load_product(int product_id, product_info_t *out_product);
 
+//从数据库中加载最近的订单
+int storage_load_recent_orders(order_info_t *out_orders, int max_count);
+
 const char *storage_error_to_string(int err);
 
 #endif

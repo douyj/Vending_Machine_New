@@ -1,6 +1,7 @@
 #include "ui/ui_login/ui_login_page.h"
 
 #include "chinese/ui_fonts.h"
+#include "member/member_manager.h"
 #include "ui/ui_login/ui_register_page.h"
 #include "ui/ui_shopping/ui_shopping_page.h"
 
@@ -147,6 +148,7 @@ static void register_btn_event_cb(lv_event_t *event)
 static void login_btn_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        member_mock_login();
         ui_shopping_page_load();
     }
 }

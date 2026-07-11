@@ -3,6 +3,9 @@
 #include <SDL2/SDL.h>
 
 #include "product/product_manager.h"
+#include "member/member_manager.h"
+#include "order/order_manager.h"
+#include "storage/storage_manager.h"
 #include "ui/ui_login/ui_login_page.h"
 
 int main(void)
@@ -12,7 +15,12 @@ int main(void)
 
     lv_init();
     sdl_init();
-    product_manager_init();
+    storage_manager_init("vending_machine.db");
+    storage_create_tables();
+    product_manager_init();     //对商品进行初始化
+    member_manager_init();      //对会员进行初始化
+    order_manager_init();       //对订单进行初始化
+
 
     lv_disp_draw_buf_init(&draw_buf, buf, NULL, SDL_HOR_RES * 80);
 
@@ -37,6 +45,8 @@ int main(void)
         SDL_Delay(5);
         lv_tick_inc(5);
     }
+
+    storage_close();
 
     return 0;
 }

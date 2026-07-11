@@ -34,7 +34,7 @@ int member_mock_login(void)
              sizeof(g_current_member.member_name),
              "%s",
              "dyj");
-    g_current_member.balance = 100.0;
+    g_current_member.balance = 1000.0;
     g_current_member.logged_in = 1;
 
     pthread_mutex_unlock(&g_member_mutex);
@@ -42,7 +42,7 @@ int member_mock_login(void)
     LOG_INFO("member mock login success, member_id=%d, name=%s, balance=%.2f",
              10001,
              "dyj",
-             100.0);
+             1000.0);
     return MEMBER_ERR_OK;
 }
 
