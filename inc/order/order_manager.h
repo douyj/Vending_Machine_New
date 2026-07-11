@@ -44,6 +44,15 @@ typedef struct{
 
 }order_info_t;
 
+/*
+    @brief 购物车商品结构体 
+    @param product_id 商品ID
+    @param quantity 商品数量
+*/
+typedef struct {
+    int product_id;
+    int quantity;
+} order_cart_item_t;
 
 int order_manager_init(void);
 
@@ -54,6 +63,10 @@ int order_deduct_stock(order_info_t *order);
 int order_finish(order_info_t *order);
 
 int order_process_buy(int product_id, int count, order_info_t *out_order);
+int order_process_cart_buy(const order_cart_item_t *items,
+                           int item_count,
+                           double *out_paid_total,
+                           double *out_balance_after);
 
 const char *order_error_to_string(int err);
 

@@ -25,26 +25,78 @@ void product_manager_init(void)
     g_product_count = 0;
 
     g_products[0].product_id = 1;
-    strcpy(g_products[0].product_name, "Coca Cola");
-    g_products[0].product_price = 3.00;
-    g_products[0].product_stock = 10;
+    strcpy(g_products[0].product_name, "美式咖啡");
+    g_products[0].product_price = 8.00;
+    g_products[0].product_stock = 99;
+    g_products[0].product_category = PRODUCT_CATEGORY_DRINKS;
 
     g_products[1].product_id = 2;
-    strcpy(g_products[1].product_name, "Water");
-    g_products[1].product_price = 2.00;
-    g_products[1].product_stock = 15;
+    strcpy(g_products[1].product_name, "拿铁咖啡");
+    g_products[1].product_price = 10.00;
+    g_products[1].product_stock = 99;
+    g_products[1].product_category = PRODUCT_CATEGORY_DRINKS;
 
     g_products[2].product_id = 3;
-    strcpy(g_products[2].product_name, "Bread");
-    g_products[2].product_price = 5.00;
-    g_products[2].product_stock = 8;
+    strcpy(g_products[2].product_name, "橙味汽水");
+    g_products[2].product_price = 6.00;
+    g_products[2].product_stock = 99;
+    g_products[2].product_category = PRODUCT_CATEGORY_DRINKS;
 
     g_products[3].product_id = 4;
-    strcpy(g_products[3].product_name, "Tissue");
-    g_products[3].product_price = 4.00;
-    g_products[3].product_stock = 6;
+    strcpy(g_products[3].product_name, "薯片");
+    g_products[3].product_price = 7.50;
+    g_products[3].product_stock = 99;
+    g_products[3].product_category = PRODUCT_CATEGORY_SNACKS;
 
-    g_product_count = 4;
+    g_products[4].product_id = 5;
+    strcpy(g_products[4].product_name, "巧克力");
+    g_products[4].product_price = 5.50;
+    g_products[4].product_stock = 99;
+    g_products[4].product_category = PRODUCT_CATEGORY_SNACKS;
+
+    g_products[5].product_id = 6;
+    strcpy(g_products[5].product_name, "黄油饼干");
+    g_products[5].product_price = 9.00;
+    g_products[5].product_stock = 0;
+    g_products[5].product_category = PRODUCT_CATEGORY_SNACKS;
+
+    g_products[6].product_id = 7;
+    strcpy(g_products[6].product_name, "苹果杯");
+    g_products[6].product_price = 6.50;
+    g_products[6].product_stock = 99;
+    g_products[6].product_category = PRODUCT_CATEGORY_FRUITS;
+
+    g_products[7].product_id = 8;
+    strcpy(g_products[7].product_name, "香蕉");
+    g_products[7].product_price = 4.00;
+    g_products[7].product_stock = 99;
+    g_products[7].product_category = PRODUCT_CATEGORY_FRUITS;
+
+    g_products[8].product_id = 9;
+    strcpy(g_products[8].product_name, "葡萄盒");
+    g_products[8].product_price = 8.50;
+    g_products[8].product_stock = 99;
+    g_products[8].product_category = PRODUCT_CATEGORY_FRUITS;
+
+    g_products[9].product_id = 10;
+    strcpy(g_products[9].product_name, "纸巾包");
+    g_products[9].product_price = 3.50;
+    g_products[9].product_stock = 99;
+    g_products[9].product_category = PRODUCT_CATEGORY_OTHERS;
+
+    g_products[10].product_id = 11;
+    strcpy(g_products[10].product_name, "湿巾");
+    g_products[10].product_price = 4.50;
+    g_products[10].product_stock = 99;
+    g_products[10].product_category = PRODUCT_CATEGORY_OTHERS;
+
+    g_products[11].product_id = 12;
+    strcpy(g_products[11].product_name, "数据线");
+    g_products[11].product_price = 15.00;
+    g_products[11].product_stock = 99;
+    g_products[11].product_category = PRODUCT_CATEGORY_OTHERS;
+
+    g_product_count = PRODUCT_MANAGER_PRODUCT_COUNT;
 
     pthread_mutex_unlock(&g_product_mutex);
 
@@ -77,6 +129,30 @@ void product_printf_all(void)
 }
 
 /*
+    @brief 获取所有商品信息快照
+    @param out_products 商品信息输出数组
+    @param max_count 输出数组最大容量
+    @return 实际写入的商品数量，失败返回 -1
+*/
+int product_manager_get_all(product_info_t *out_products, int max_count)
+{
+    int copy_count;
+
+    if (out_products == NULL || max_count <= 0) {
+        return -1;
+    }
+
+    pthread_mutex_lock(&g_product_mutex);
+
+    copy_count = g_product_count < max_count ? g_product_count : max_count;
+    memcpy(out_products, g_products, sizeof(product_info_t) * copy_count);
+
+    pthread_mutex_unlock(&g_product_mutex);
+
+    return copy_count;
+}
+
+/*
     @brief 根据商品ID获取商品信息
     @param product_id 商品ID
     @param out_product 商品信息指针
@@ -98,6 +174,38 @@ int product_manager_get_by_id(int product_id, product_info_t *out_product)
     }
 
     pthread_mutex_unlock(&g_product_mutex);
+    return -1;
+}
+
+/*
+    @brief 设置商品库存
+    @param product_id 商品ID
+    @param stock 最新库存
+    @return 0 成功 -1 失败
+*/
+int product_manager_set_stock(int product_id, int stock)
+{
+    if(product_id <= 0 || stock < 0) {
+        LOG_WARN("set stock invalid param, product_id=%d, stock=%d",
+                 product_id, stock);
+        return -1;
+    }
+
+    pthread_mutex_lock(&g_product_mutex);
+
+    for(int i = 0; i < g_product_count; i++){
+        if(g_products[i].product_id == product_id){
+            g_products[i].product_stock = stock;
+            pthread_mutex_unlock(&g_product_mutex);
+
+            LOG_INFO("set stock success, product_id=%d, stock=%d",
+                     product_id, stock);
+            return 0;
+        }
+    }
+
+    pthread_mutex_unlock(&g_product_mutex);
+    LOG_WARN("set stock failed, product_id=%d not found", product_id);
     return -1;
 }
 

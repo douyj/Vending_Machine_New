@@ -9,7 +9,8 @@ typedef enum {
     STORAGE_ERR_OK = 0,
     STORAGE_ERR_INVALID_PARAM = -1,
     STORAGE_ERR_OPEN_FAILED = -2,
-    STORAGE_ERR_EXEC_FAILED = -3
+    STORAGE_ERR_EXEC_FAILED = -3,
+    STORAGE_ERR_NOT_FOUND = -4
 } storage_err_t;
 
 
@@ -18,6 +19,9 @@ int storage_create_tables(void);
 int storage_close(void);
 
 int storage_insert_order(const order_info_t *order);
+int storage_insert_or_update_product(const product_info_t *product);
+int storage_update_product_stock(int product_id, int stock);
+int storage_load_product(int product_id, product_info_t *out_product);
 
 const char *storage_error_to_string(int err);
 

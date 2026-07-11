@@ -546,6 +546,152 @@ int order_process_buy(int product_id, int count, order_info_t *out_order)
 
 
 /*
+    @brief 购物车购买流程
+    @param items 购物车商品数组
+    @param item_count 购物车商品数量
+    @param out_paid_total 输出已支付金额
+    @param out_balance_after 输出余额
+    @return ORDER_ERR_OK 成功，其他失败
+*/
+int order_process_cart_buy(const order_cart_item_t *items,
+                           int item_count,
+                           double *out_paid_total,
+                           double *out_balance_after)
+{
+    product_info_t products[PRODUCT_MANAGER_PRODUCT_COUNT];
+    order_info_t orders[PRODUCT_MANAGER_PRODUCT_COUNT];
+    double total_price = 0.0;
+    double balance_before = 0.0;
+    double balance_after = 0.0;
+    int ret;
+
+    if (items == NULL || item_count <= 0 ||
+        item_count > PRODUCT_MANAGER_PRODUCT_COUNT) {
+        LOG_WARN("cart buy invalid param, item_count=%d", item_count);
+        return ORDER_ERR_INVALID_PARAM;
+    }
+
+    if (!member_is_logged_in()) {
+        LOG_WARN("cart buy failed, member not logged in");
+        return ORDER_ERR_MEMBER_NOT_LOGIN;
+    }
+
+    memset(products, 0, sizeof(products));
+    memset(orders, 0, sizeof(orders));
+
+    for (int i = 0; i < item_count; i++) {
+        if (items[i].product_id <= 0 || items[i].quantity <= 0) {
+            LOG_WARN("cart buy invalid item, index=%d, product_id=%d, quantity=%d",
+                     i,
+                     items[i].product_id,
+                     items[i].quantity);
+            return ORDER_ERR_INVALID_PARAM;
+        }
+
+        ret = product_manager_get_by_id(items[i].product_id, &products[i]);
+        if (ret != 0) {
+            LOG_WARN("cart buy failed, product not found, product_id=%d",
+                     items[i].product_id);
+            return ORDER_ERR_PRODUCT_NOT_FOUND;
+        }
+
+        if (products[i].product_stock < items[i].quantity) {
+            LOG_WARN("cart buy failed, stock not enough, product_id=%d, stock=%d, need=%d",
+                     items[i].product_id,
+                     products[i].product_stock,
+                     items[i].quantity);
+            return ORDER_ERR_OUT_OF_STOCK;
+        }
+
+        total_price += products[i].product_price * items[i].quantity;
+    }
+
+    if (total_price <= 0.0) {
+        LOG_WARN("cart buy failed, invalid total_price=%.2f", total_price);
+        return ORDER_ERR_INVALID_PARAM;
+    }
+
+    ret = member_check_balance(total_price);
+    if (ret != MEMBER_ERR_OK) {
+        LOG_WARN("cart buy failed, balance check failed, total=%.2f, ret=%d",
+                 total_price,
+                 ret);
+        if (ret == MEMBER_ERR_NOT_LOGIN) {
+            return ORDER_ERR_MEMBER_NOT_LOGIN;
+        }
+        if (ret == MEMBER_ERR_BALANCE_NOT_ENOUGH) {
+            return ORDER_ERR_BALANCE_NOT_ENOUGH;
+        }
+        return ORDER_ERR_PAY_FAILED;
+    }
+
+    for (int i = 0; i < item_count; i++) {
+        ret = order_create(items[i].product_id, items[i].quantity, &orders[i]);
+        if (ret != ORDER_ERR_OK) {
+            LOG_WARN("cart buy failed, create order failed, product_id=%d, quantity=%d, ret=%d",
+                     items[i].product_id,
+                     items[i].quantity,
+                     ret);
+            return ret;
+        }
+    }
+
+    ret = member_deduct_balance(total_price, &balance_before, &balance_after);
+    if (ret != MEMBER_ERR_OK) {
+        LOG_WARN("cart buy failed, deduct balance failed, total=%.2f, ret=%d",
+                 total_price,
+                 ret);
+        if (ret == MEMBER_ERR_NOT_LOGIN) {
+            return ORDER_ERR_MEMBER_NOT_LOGIN;
+        }
+        if (ret == MEMBER_ERR_BALANCE_NOT_ENOUGH) {
+            return ORDER_ERR_BALANCE_NOT_ENOUGH;
+        }
+        return ORDER_ERR_PAY_FAILED;
+    }
+
+    for (int i = 0; i < item_count; i++) {
+        orders[i].balance_before_pay = balance_before;
+        orders[i].balance_after_pay = balance_after;
+        orders[i].state = ORDER_STATE_PAID;
+
+        ret = order_deduct_stock(&orders[i]);
+        if (ret != ORDER_ERR_OK) {
+            LOG_WARN("cart buy failed, deduct stock failed, order_id=%s, ret=%d",
+                     orders[i].order_id,
+                     ret);
+            return ret;
+        }
+
+        ret = order_finish(&orders[i]);
+        if (ret != ORDER_ERR_OK) {
+            LOG_WARN("cart buy failed, finish order failed, order_id=%s, ret=%d",
+                     orders[i].order_id,
+                     ret);
+            return ret;
+        }
+    }
+
+    if (out_paid_total != NULL) {
+        *out_paid_total = total_price;
+    }
+
+    if (out_balance_after != NULL) {
+        *out_balance_after = balance_after;
+    }
+
+    LOG_INFO("cart buy success, item_count=%d, total_price=%.2f, balance_before=%.2f, balance_after=%.2f",
+             item_count,
+             total_price,
+             balance_before,
+             balance_after);
+
+    return ORDER_ERR_OK;
+
+}
+
+
+/*
  * @brief 订单错误码转字符串
  *
  * 方便日志、调试、Qt 后台显示。
