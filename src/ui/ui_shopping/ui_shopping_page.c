@@ -511,6 +511,9 @@ static void order_btn_event_cb(lv_event_t *event)
 */
 static void create_top_bar(lv_obj_t *parent)
 {
+    member_info_t member;
+    char title_text[64];
+
     lv_obj_t *top_bar = lv_obj_create(parent);
     lv_obj_set_size(top_bar, UI_SHOPPING_SCREEN_W, UI_SHOPPING_TOP_H);
     lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
@@ -523,8 +526,16 @@ static void create_top_bar(lv_obj_t *parent)
     lv_obj_set_style_pad_left(top_bar, UI_SHOPPING_MARGIN, 0);
     lv_obj_set_style_pad_right(top_bar, UI_SHOPPING_MARGIN, 0);
 
-    lv_obj_t *title = create_label(top_bar, "会员购物",
+    if (member_get_current(&member) == MEMBER_ERR_OK) {
+        snprintf(title_text, sizeof(title_text), "你好，%s", member.member_name);
+    } else {
+        snprintf(title_text, sizeof(title_text), "你好，会员");
+    }
+
+    lv_obj_t *title = create_label(top_bar, title_text,
                                    ui_font_zh_16(), lv_color_hex(0xFFFFFF));
+    lv_obj_set_width(title, 132);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_CLIP);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 0, 0);
 
     balance_label = create_label(top_bar, "余额 --",

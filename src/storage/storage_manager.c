@@ -84,6 +84,18 @@ int storage_create_tables(void)
         "product_category INTEGER,"
         "update_time INTEGER"
         ");";
+
+    const char *member_sql =
+        "CREATE TABLE IF NOT EXISTS members ("
+        "member_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "username TEXT UNIQUE,"
+        "password TEXT,"
+        "member_name TEXT,"
+        "balance REAL,"
+        "create_time INTEGER,"
+        "update_time INTEGER"
+        ");";
+
     const char *product_category_migration_sql =
         "ALTER TABLE products ADD COLUMN product_category INTEGER DEFAULT 4;";
 
@@ -99,6 +111,12 @@ int storage_create_tables(void)
         return STORAGE_ERR_EXEC_FAILED;
     }
 
+    if (sqlite3_exec(g_db, member_sql, NULL, NULL, &errmsg) != SQLITE_OK) {
+        LOG_ERROR("create members table failed: %s", errmsg);
+        sqlite3_free(errmsg);
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
     if (sqlite3_exec(g_db, product_category_migration_sql, NULL, NULL, &errmsg) != SQLITE_OK) {
         if (errmsg == NULL || strstr(errmsg, "duplicate column name") == NULL) {
             LOG_ERROR("migrate products table failed: %s", errmsg);
@@ -109,7 +127,148 @@ int storage_create_tables(void)
         errmsg = NULL;
     }
 
+    if (storage_insert_default_member() != STORAGE_ERR_OK) {
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
     LOG_INFO("storage tables created");
+    return STORAGE_ERR_OK;
+}
+
+/*
+    @brief 插入默认测试会员
+    @return 存储错误码
+*/
+int storage_insert_default_member(void)
+{
+    sqlite3_stmt *stmt = NULL;
+    const char *sql =
+        "INSERT OR IGNORE INTO members ("
+        "username, password, member_name, balance, create_time, update_time"
+        ") VALUES (?, ?, ?, ?, strftime('%s','now'), strftime('%s','now'));";
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        LOG_ERROR("prepare insert default member failed: %s", sqlite3_errmsg(g_db));
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    sqlite3_bind_text(stmt, 1, "test", -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, "123456", -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, "dyj", -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(stmt, 4, 1000.0);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        LOG_ERROR("insert default member failed: %s", sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    sqlite3_finalize(stmt);
+    LOG_INFO("default member ready");
+    return STORAGE_ERR_OK;
+}
+
+/*
+    @brief 根据账号密码查询会员
+    @param username 账号
+    @param password 密码
+    @param out_member 输出会员信息
+    @return 存储错误码
+*/
+int storage_find_member_by_login(const char *username,
+                                 const char *password,
+                                 member_info_t *out_member)
+{
+    sqlite3_stmt *stmt = NULL;
+    const unsigned char *name = NULL;
+    int step_ret;
+    const char *sql =
+        "SELECT member_id, member_name, balance "
+        "FROM members "
+        "WHERE username = ? AND password = ?;";
+
+    if (username == NULL || password == NULL || out_member == NULL) {
+        return STORAGE_ERR_INVALID_PARAM;
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        LOG_ERROR("prepare find member failed: %s", sqlite3_errmsg(g_db));
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, password, -1, SQLITE_TRANSIENT);
+
+    step_ret = sqlite3_step(stmt);
+    if (step_ret == SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        return STORAGE_ERR_NOT_FOUND;
+    }
+
+    if (step_ret != SQLITE_ROW) {
+        LOG_ERROR("find member failed: %s", sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    memset(out_member, 0, sizeof(member_info_t));
+
+    out_member->member_id = sqlite3_column_int(stmt, 0);
+
+    name = sqlite3_column_text(stmt, 1);
+    snprintf(out_member->member_name,
+             sizeof(out_member->member_name),
+             "%s",
+             name ? (const char *)name : "");
+
+    out_member->balance = sqlite3_column_double(stmt, 2);
+    out_member->logged_in = 1;
+
+    sqlite3_finalize(stmt);
+    return STORAGE_ERR_OK;
+}
+
+/*
+    @brief 更新会员余额
+    @param member_id 会员ID
+    @param balance 最新余额
+    @return 存储错误码
+*/
+int storage_update_member_balance(int member_id, double balance)
+{
+    sqlite3_stmt *stmt = NULL;
+    const char *sql =
+        "UPDATE members "
+        "SET balance = ?, update_time = strftime('%s','now') "
+        "WHERE member_id = ?;";
+
+    if (member_id <= 0 || balance < 0.0) {
+        return STORAGE_ERR_INVALID_PARAM;
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        LOG_ERROR("prepare update member balance failed: %s", sqlite3_errmsg(g_db));
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    sqlite3_bind_double(stmt, 1, balance);
+    sqlite3_bind_int(stmt, 2, member_id);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        LOG_ERROR("update member balance failed: %s", sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    if (sqlite3_changes(g_db) <= 0) {
+        sqlite3_finalize(stmt);
+        return STORAGE_ERR_NOT_FOUND;
+    }
+
+    sqlite3_finalize(stmt);
+    LOG_INFO("update member balance success, member_id=%d, balance=%.2f",
+             member_id,
+             balance);
     return STORAGE_ERR_OK;
 }
 
@@ -164,6 +323,35 @@ int storage_insert_order(const order_info_t *order)
 
     LOG_INFO("insert order success, order_id=%s", order->order_id);
     return STORAGE_ERR_OK;
+}
+
+/*
+    @brief 获取下一个订单序号
+    @return 下一个订单序号，失败时返回 1
+*/
+int storage_get_next_order_seq(void)
+{
+    sqlite3_stmt *stmt = NULL;
+    int next_seq = 1;
+    const char *sql =
+        "SELECT COALESCE(MAX(CAST(SUBSTR(order_id, 7) AS INTEGER)), 0) + 1 "
+        "FROM orders "
+        "WHERE order_id LIKE 'ORDER_%';";
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        LOG_ERROR("prepare get next order seq failed: %s", sqlite3_errmsg(g_db));
+        return next_seq;
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        next_seq = sqlite3_column_int(stmt, 0);
+        if (next_seq <= 0) {
+            next_seq = 1;
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return next_seq;
 }
 
 /*

@@ -5,7 +5,7 @@
 #include "product/product_manager.h"
 
 #define ORDER_ID_MAX_LEN 32
-#define ORDER_PRODUCT_NAME_MAX_LEN 50
+#define ORDER_PRODUCT_NAME_MAX_LEN 256
 
 typedef enum {
     ORDER_ERR_OK = 0,                       // 成功

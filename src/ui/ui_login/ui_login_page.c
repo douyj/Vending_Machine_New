@@ -13,8 +13,16 @@
 #define UI_LOGIN_PREVIEW_W      464
 #define UI_LOGIN_PREVIEW_H      330
 #define UI_LOGIN_RIGHT_W        216
+#define UI_LOGIN_INPUT_W        204
+#define UI_LOGIN_INPUT_H        54
 #define UI_LOGIN_BUTTON_W       204
-#define UI_LOGIN_BUTTON_H       76
+#define UI_LOGIN_BUTTON_H       48
+#define UI_LOGIN_KEYBOARD_H     180
+
+static lv_obj_t *username_input;
+static lv_obj_t *password_input;
+static lv_obj_t *status_label;
+static lv_obj_t *keyboard;
 
 static lv_obj_t *create_label(lv_obj_t *parent, const char *text,
                               const lv_font_t *font, lv_color_t color)
@@ -138,19 +146,119 @@ static lv_obj_t *create_action_button(lv_obj_t *parent, const char *text,
     return btn;
 }
 
+/*
+    @brief 创建登录输入框
+    @param parent 父对象
+    @param placeholder 占位符文本
+    @param default_text 默认文本
+    @param password_mode 是否密码模式
+    @return 输入框对象指针
+*/
+static lv_obj_t *create_login_input(lv_obj_t *parent,
+                                    const char *placeholder,
+                                    const char *default_text,
+                                    bool password_mode)
+{
+    lv_obj_t *input = lv_textarea_create(parent);
+    lv_obj_set_size(input, UI_LOGIN_INPUT_W, UI_LOGIN_INPUT_H);
+    lv_textarea_set_one_line(input, true);
+    lv_textarea_set_placeholder_text(input, placeholder);
+    lv_textarea_set_text(input, default_text);
+    lv_textarea_set_max_length(input, 24);
+    lv_textarea_set_password_mode(input, password_mode);
+    lv_obj_set_style_text_font(input, ui_font_zh_16(), 0);
+    lv_obj_set_style_text_font(input, ui_font_zh_16(), LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_text_color(input, lv_color_hex(0x111827), 0);
+    lv_obj_set_style_text_color(input, lv_color_hex(0x9CA3AF),
+                                LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_bg_color(input, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_border_color(input, lv_color_hex(0xD7DEE8), 0);
+    lv_obj_set_style_border_width(input, 1, 0);
+    lv_obj_set_style_radius(input, 10, 0);
+    lv_obj_set_style_pad_left(input, 12, 0);
+    lv_obj_set_style_pad_right(input, 12, 0);
+    return input;
+}
+
+static void hide_keyboard(void)
+{
+    if (keyboard == NULL) {
+        return;
+    }
+
+    lv_keyboard_set_textarea(keyboard, NULL);
+    lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void input_event_cb(lv_event_t *event)
+{
+    lv_event_code_t code = lv_event_get_code(event);
+    lv_obj_t *input = lv_event_get_target(event);
+
+    if (keyboard == NULL) {
+        return;
+    }
+
+    if (code == LV_EVENT_FOCUSED || code == LV_EVENT_CLICKED) {
+        lv_keyboard_set_textarea(keyboard, input);
+        lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+        lv_obj_clear_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(keyboard);
+    }
+}
+
+static void keyboard_event_cb(lv_event_t *event)
+{
+    lv_event_code_t code = lv_event_get_code(event);
+
+    if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+        hide_keyboard();
+    }
+}
+
 static void register_btn_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        hide_keyboard();
         ui_register_page_load();
     }
 }
 
 static void login_btn_event_cb(lv_event_t *event)
 {
+    const char *username;
+    const char *password;
+    int ret;
+
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        member_mock_login();
-        ui_shopping_page_load();
+        hide_keyboard();
+
+        username = lv_textarea_get_text(username_input);
+        password = lv_textarea_get_text(password_input);
+
+        ret = member_login(username, password);
+        if (ret == MEMBER_ERR_OK) {
+            lv_label_set_text(status_label, "");
+            ui_shopping_page_load();
+            return;
+        }
+
+        if (ret == MEMBER_ERR_NOT_FOUND) {
+            lv_label_set_text(status_label, "账号或密码错误");
+        } else {
+            lv_label_set_text(status_label, "登录失败");
+        }
     }
+}
+
+static void face_login_btn_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    hide_keyboard();
+    lv_label_set_text(status_label, "正在开启摄像头...");
 }
 
 static lv_obj_t *create_action_area(lv_obj_t *screen)
@@ -161,21 +269,73 @@ static lv_obj_t *create_action_area(lv_obj_t *screen)
     style_plain_bg(area, lv_color_hex(0xFFFFFF));
     lv_obj_clear_flag(area, LV_OBJ_FLAG_SCROLLABLE);
 
+    lv_obj_t *title = create_label(area, "会员登录", ui_font_zh_16(),
+                                   lv_color_hex(0x111827));
+    lv_obj_align(title, LV_ALIGN_CENTER, 0, -148);
+
+    lv_obj_t *username_label = create_label(area, "账号", ui_font_zh_16(),
+                                            lv_color_hex(0x374151));
+    lv_obj_align(username_label, LV_ALIGN_CENTER, 0, -112);
+
+    username_input = create_login_input(area, "请输入账号", "test", false);
+    lv_obj_align(username_input, LV_ALIGN_CENTER, 0, -78);
+    lv_obj_add_event_cb(username_input, input_event_cb, LV_EVENT_FOCUSED, NULL);
+    lv_obj_add_event_cb(username_input, input_event_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *password_label = create_label(area, "密码", ui_font_zh_16(),
+                                            lv_color_hex(0x374151));
+    lv_obj_align(password_label, LV_ALIGN_CENTER, 0, -38);
+
+    password_input = create_login_input(area, "请输入密码", "123456", true);
+    lv_obj_align(password_input, LV_ALIGN_CENTER, 0, -4);
+    lv_obj_add_event_cb(password_input, input_event_cb, LV_EVENT_FOCUSED, NULL);
+    lv_obj_add_event_cb(password_input, input_event_cb, LV_EVENT_CLICKED, NULL);
+
+    status_label = create_label(area, "", ui_font_zh_12(),
+                                lv_color_hex(0xDC2626));
+    lv_obj_set_size(status_label, UI_LOGIN_BUTTON_W, 22);
+    lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(status_label, LV_ALIGN_CENTER, 0, 37);
+
     lv_obj_t *login_btn = create_action_button(area, "会员登录",
                                                lv_color_hex(0x1677FF),
                                                lv_color_hex(0xFFFFFF),
                                                lv_color_hex(0x1677FF));
-    lv_obj_align(login_btn, LV_ALIGN_CENTER, 0, -50);
+    lv_obj_align(login_btn, LV_ALIGN_CENTER, 0, 65);
     lv_obj_add_event_cb(login_btn, login_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *face_login_btn = create_action_button(area, "人脸登录",
+                                                    lv_color_hex(0x7C3AED),
+                                                    lv_color_hex(0xFFFFFF),
+                                                    lv_color_hex(0x7C3AED));
+    lv_obj_align(face_login_btn, LV_ALIGN_CENTER, 0, 119);
+    lv_obj_add_event_cb(face_login_btn, face_login_btn_event_cb,
+                        LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *register_btn = create_action_button(area, "会员注册",
                                                   lv_color_hex(0x22A55A),
                                                   lv_color_hex(0xFFFFFF),
                                                   lv_color_hex(0x22A55A));
-    lv_obj_align(register_btn, LV_ALIGN_CENTER, 0, 50);
+    lv_obj_align(register_btn, LV_ALIGN_CENTER, 0, 173);
     lv_obj_add_event_cb(register_btn, register_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
     return area;
+}
+
+static void create_keyboard(lv_obj_t *screen)
+{
+    keyboard = lv_keyboard_create(screen);
+    lv_obj_set_size(keyboard, UI_LOGIN_SCREEN_W, UI_LOGIN_KEYBOARD_H);
+    lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+    lv_obj_set_style_bg_color(keyboard, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_bg_opa(keyboard, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(keyboard, lv_color_hex(0xD7DEE8), 0);
+    lv_obj_set_style_border_width(keyboard, 1, 0);
+    lv_obj_set_style_text_font(keyboard, &lv_font_montserrat_14, 0);
+    lv_obj_add_event_cb(keyboard, keyboard_event_cb, LV_EVENT_READY, NULL);
+    lv_obj_add_event_cb(keyboard, keyboard_event_cb, LV_EVENT_CANCEL, NULL);
+    lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
 }
 
 lv_obj_t *ui_login_page_create(void)
@@ -187,8 +347,14 @@ lv_obj_t *ui_login_page_create(void)
     style_plain_bg(screen, lv_color_hex(0xFFFFFF));
     lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
+    username_input = NULL;
+    password_input = NULL;
+    status_label = NULL;
+    keyboard = NULL;
+
     create_camera_area(screen);
     create_action_area(screen);
+    create_keyboard(screen);
 
     return screen;
 }

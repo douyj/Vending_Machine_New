@@ -18,7 +18,14 @@ int storage_manager_init(const char *db_path);
 int storage_create_tables(void);
 int storage_close(void);
 
+int storage_insert_default_member(void);
+int storage_find_member_by_login(const char *username,
+                                 const char *password,
+                                 member_info_t *out_member);
+int storage_update_member_balance(int member_id, double balance);
+
 int storage_insert_order(const order_info_t *order);
+int storage_get_next_order_seq(void);
 int storage_insert_or_update_product(const product_info_t *product);
 int storage_update_product_stock(int product_id, int stock);
 int storage_load_product(int product_id, product_info_t *out_product);

@@ -115,11 +115,22 @@ static void create_top_bar(lv_obj_t *parent)
 
 static void create_order_row(lv_obj_t *parent, const order_info_t *order)
 {
-    char text[96];
+    char text[ORDER_PRODUCT_NAME_MAX_LEN + 32];
     char time_text[32];
+    int line_count = 1;
+    int row_height;
+
+    for (const char *p = order->product_name; *p != '\0'; p++) {
+        if (*p == '\n') {
+            line_count++;
+        }
+    }
+
+    row_height = 92 + (line_count - 1) * 24;
 
     lv_obj_t *row = lv_obj_create(parent);
-    lv_obj_set_size(row, UI_ORDER_SCREEN_W - UI_ORDER_MARGIN * 2 - 16, 92);
+    lv_obj_set_size(row, UI_ORDER_SCREEN_W - UI_ORDER_MARGIN * 2 - 16,
+                    row_height);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(row, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
@@ -134,19 +145,23 @@ static void create_order_row(lv_obj_t *parent, const order_info_t *order)
                                       lv_color_hex(0x6B7280));
     lv_obj_align(order_id, LV_ALIGN_TOP_LEFT, 14, 10);
 
-    snprintf(text, sizeof(text), "%s x%d", order->product_name,
-             order->product_count);
+    if (order->product_id == 0) {
+        snprintf(text, sizeof(text), "%s", order->product_name);
+    } else {
+        snprintf(text, sizeof(text), "%s x%d", order->product_name,
+                 order->product_count);
+    }
     lv_obj_t *product = create_label(row, text, ui_font_zh_16(),
                                      lv_color_hex(0x111827));
     lv_obj_set_width(product, 320);
-    lv_label_set_long_mode(product, LV_LABEL_LONG_CLIP);
+    lv_label_set_long_mode(product, LV_LABEL_LONG_WRAP);
     lv_obj_align(product, LV_ALIGN_TOP_LEFT, 14, 36);
 
     format_order_time(order->create_time, time_text, sizeof(time_text));
     lv_obj_t *time_label = create_label(row, time_text,
                                         &lv_font_montserrat_14,
                                         lv_color_hex(0x6B7280));
-    lv_obj_align(time_label, LV_ALIGN_TOP_LEFT, 14, 64);
+    lv_obj_align(time_label, LV_ALIGN_TOP_LEFT, 14, 64 + (line_count - 1) * 24);
 
     snprintf(text, sizeof(text), "%.2f元", order->total_price);
     lv_obj_t *price = create_label(row, text, ui_font_zh_16(),

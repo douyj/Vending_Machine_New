@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "storage/storage_manager.h"
+
 static member_info_t g_current_member;
 static pthread_mutex_t g_member_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -22,28 +24,51 @@ int member_manager_init(void)
 }
 
 /*
+    @brief 会员登录
+    @param username 账号
+    @param password 密码
+    @return MEMBER_ERR_OK 成功，其他失败
+*/
+int member_login(const char *username, const char *password)
+{
+    member_info_t member;
+    int ret;
+
+    if (username == NULL || password == NULL) {
+        LOG_WARN("member login invalid param");
+        return MEMBER_ERR_INVALID_PARAM;
+    }
+
+    ret = storage_find_member_by_login(username, password, &member);
+    if (ret == STORAGE_ERR_NOT_FOUND) {
+        LOG_WARN("member login failed, not found, username=%s", username);
+        return MEMBER_ERR_NOT_FOUND;
+    }
+
+    if (ret != STORAGE_ERR_OK) {
+        LOG_WARN("member login failed, storage ret=%d", ret);
+        return MEMBER_ERR_STORAGE_FAILED;
+    }
+
+    pthread_mutex_lock(&g_member_mutex);
+    g_current_member = member;
+    pthread_mutex_unlock(&g_member_mutex);
+
+    LOG_INFO("member login success, member_id=%d, name=%s, balance=%.2f",
+             member.member_id,
+             member.member_name,
+             member.balance);
+
+    return MEMBER_ERR_OK;
+}
+
+/*
     @brief 模拟会员登录
     @return MEMBER_ERR_OK 成功
 */
 int member_mock_login(void)
 {
-    pthread_mutex_lock(&g_member_mutex);
-
-    g_current_member.member_id = 10001;
-    snprintf(g_current_member.member_name,
-             sizeof(g_current_member.member_name),
-             "%s",
-             "dyj");
-    g_current_member.balance = 1000.0;
-    g_current_member.logged_in = 1;
-
-    pthread_mutex_unlock(&g_member_mutex);
-
-    LOG_INFO("member mock login success, member_id=%d, name=%s, balance=%.2f",
-             10001,
-             "dyj",
-             1000.0);
-    return MEMBER_ERR_OK;
+    return member_login("test", "123456");
 }
 
 /*
@@ -142,6 +167,10 @@ int member_check_balance(double amount)
 */
 int member_deduct_balance(double amount, double *before, double *after)
 {
+    double old_balance;
+    double new_balance;
+    int ret;
+
     if (amount <= 0) {
         LOG_WARN("member deduct balance invalid amount=%.2f", amount);
         return MEMBER_ERR_INVALID_PARAM;
@@ -167,7 +196,19 @@ int member_deduct_balance(double amount, double *before, double *after)
         *before = g_current_member.balance;
     }
 
-    g_current_member.balance -= amount;
+    old_balance = g_current_member.balance;
+    new_balance = old_balance - amount;
+
+    ret = storage_update_member_balance(g_current_member.member_id, new_balance);
+    if (ret != STORAGE_ERR_OK) {
+        pthread_mutex_unlock(&g_member_mutex);
+        LOG_WARN("member deduct balance failed, update storage failed, member_id=%d, ret=%d",
+                 g_current_member.member_id,
+                 ret);
+        return MEMBER_ERR_STORAGE_FAILED;
+    }
+
+    g_current_member.balance = new_balance;
 
     if (after != NULL) {
         *after = g_current_member.balance;
@@ -228,6 +269,8 @@ const char *member_error_to_string(int err)
         return "ALREADY_LOGIN";
     case MEMBER_ERR_NOT_FOUND:
         return "NOT_FOUND";
+    case MEMBER_ERR_STORAGE_FAILED:
+        return "STORAGE_FAILED";
     default:
         return "UNKNOWN";
     }

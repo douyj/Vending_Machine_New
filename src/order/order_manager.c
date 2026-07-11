@@ -34,6 +34,30 @@ static void order_generate_id(char *buf, int len)
     snprintf(buf, len, "ORDER_%06d", g_order_seq++);
 }
 
+static void order_append_cart_item_text(char *buf,
+                                        int buf_len,
+                                        const char *product_name,
+                                        int quantity)
+{
+    int used;
+
+    if (buf == NULL || buf_len <= 0 || product_name == NULL || quantity <= 0) {
+        return;
+    }
+
+    used = (int)strlen(buf);
+    if (used >= buf_len - 1) {
+        return;
+    }
+
+    snprintf(buf + used,
+             buf_len - used,
+             "%s%s x%d",
+             used > 0 ? "\n" : "",
+             product_name,
+             quantity);
+}
+
 
 /*
  * @brief 初始化订单管理器
@@ -41,9 +65,9 @@ static void order_generate_id(char *buf, int len)
  */
 int order_manager_init(void)
 {
-    g_order_seq = 1;
+    g_order_seq = storage_get_next_order_seq();
 
-    LOG_INFO("order manager initialized");
+    LOG_INFO("order manager initialized, next_order_seq=%d", g_order_seq);
 
     return ORDER_ERR_OK;
 }
@@ -396,6 +420,8 @@ int order_deduct_stock(order_info_t *order)
  */
 int order_finish(order_info_t *order)
 {
+    int ret;
+
     if (order == NULL) {
         LOG_WARN("order finish invalid param, order is NULL");
         return ORDER_ERR_INVALID_PARAM;
@@ -418,7 +444,14 @@ int order_finish(order_info_t *order)
      */
     order->upload_status = 0;
 
-    storage_insert_order(order);   //将订单写入数据库
+    ret = storage_insert_order(order);
+    if (ret != STORAGE_ERR_OK) {
+        LOG_WARN("order finish failed, insert order failed, order_id: %s, ret=%d",
+                 order->order_id,
+                 ret);
+        order->state = ORDER_STATE_FAILED;
+        return ORDER_ERR_PAY_FAILED;
+    }
 
     LOG_INFO("order finish success, order_id: %s, member_id: %d, product_id: %d, count: %d, total_price: %.2f, balance_before: %.2f, balance_after: %.2f, state: %s",
              order->order_id,
@@ -562,10 +595,12 @@ int order_process_cart_buy(const order_cart_item_t *items,
                            double *out_balance_after)
 {
     product_info_t products[PRODUCT_MANAGER_PRODUCT_COUNT];
-    order_info_t orders[PRODUCT_MANAGER_PRODUCT_COUNT];
+    order_info_t order;
+    member_info_t member;
     double total_price = 0.0;
     double balance_before = 0.0;
     double balance_after = 0.0;
+    int total_quantity = 0;
     int ret;
 
     if (items == NULL || item_count <= 0 ||
@@ -580,7 +615,7 @@ int order_process_cart_buy(const order_cart_item_t *items,
     }
 
     memset(products, 0, sizeof(products));
-    memset(orders, 0, sizeof(orders));
+    memset(&order, 0, sizeof(order));
 
     for (int i = 0; i < item_count; i++) {
         if (items[i].product_id <= 0 || items[i].quantity <= 0) {
@@ -607,6 +642,7 @@ int order_process_cart_buy(const order_cart_item_t *items,
         }
 
         total_price += products[i].product_price * items[i].quantity;
+        total_quantity += items[i].quantity;
     }
 
     if (total_price <= 0.0) {
@@ -628,15 +664,30 @@ int order_process_cart_buy(const order_cart_item_t *items,
         return ORDER_ERR_PAY_FAILED;
     }
 
+    ret = member_get_current(&member);
+    if (ret != MEMBER_ERR_OK) {
+        LOG_WARN("cart buy failed, get current member failed, ret=%d", ret);
+        return ORDER_ERR_MEMBER_NOT_LOGIN;
+    }
+
+    order_generate_id(order.order_id, ORDER_ID_MAX_LEN);
+    order.member_id = member.member_id;
+    snprintf(order.member_name, sizeof(order.member_name), "%s", member.member_name);
+    order.product_id = 0;
+    order.product_count = total_quantity;
+    order.unit_price = 0.0;
+    order.total_price = total_price;
+    order.balance_before_pay = member.balance;
+    order.balance_after_pay = member.balance;
+    order.state = ORDER_STATE_CREATED;
+    order.upload_status = 0;
+    order.create_time = time(NULL);
+
     for (int i = 0; i < item_count; i++) {
-        ret = order_create(items[i].product_id, items[i].quantity, &orders[i]);
-        if (ret != ORDER_ERR_OK) {
-            LOG_WARN("cart buy failed, create order failed, product_id=%d, quantity=%d, ret=%d",
-                     items[i].product_id,
-                     items[i].quantity,
-                     ret);
-            return ret;
-        }
+        order_append_cart_item_text(order.product_name,
+                                    sizeof(order.product_name),
+                                    products[i].product_name,
+                                    items[i].quantity);
     }
 
     ret = member_deduct_balance(total_price, &balance_before, &balance_after);
@@ -653,26 +704,31 @@ int order_process_cart_buy(const order_cart_item_t *items,
         return ORDER_ERR_PAY_FAILED;
     }
 
+    order.balance_before_pay = balance_before;
+    order.balance_after_pay = balance_after;
+    order.state = ORDER_STATE_PAID;
+
     for (int i = 0; i < item_count; i++) {
-        orders[i].balance_before_pay = balance_before;
-        orders[i].balance_after_pay = balance_after;
-        orders[i].state = ORDER_STATE_PAID;
-
-        ret = order_deduct_stock(&orders[i]);
-        if (ret != ORDER_ERR_OK) {
-            LOG_WARN("cart buy failed, deduct stock failed, order_id=%s, ret=%d",
-                     orders[i].order_id,
+        ret = product_manager_sub_stock(items[i].product_id, items[i].quantity);
+        if (ret != 0) {
+            LOG_WARN("cart buy failed, deduct stock failed, order_id=%s, product_id=%d, quantity=%d, ret=%d",
+                     order.order_id,
+                     items[i].product_id,
+                     items[i].quantity,
                      ret);
-            return ret;
+            order.state = ORDER_STATE_FAILED;
+            return ORDER_ERR_STOCK_DEDUCT_FAILED;
         }
+    }
 
-        ret = order_finish(&orders[i]);
-        if (ret != ORDER_ERR_OK) {
-            LOG_WARN("cart buy failed, finish order failed, order_id=%s, ret=%d",
-                     orders[i].order_id,
-                     ret);
-            return ret;
-        }
+    order.state = ORDER_STATE_STOCK_DEDUCTED;
+
+    ret = order_finish(&order);
+    if (ret != ORDER_ERR_OK) {
+        LOG_WARN("cart buy failed, finish order failed, order_id=%s, ret=%d",
+                 order.order_id,
+                 ret);
+        return ret;
     }
 
     if (out_paid_total != NULL) {
@@ -683,7 +739,8 @@ int order_process_cart_buy(const order_cart_item_t *items,
         *out_balance_after = balance_after;
     }
 
-    LOG_INFO("cart buy success, item_count=%d, total_price=%.2f, balance_before=%.2f, balance_after=%.2f",
+    LOG_INFO("cart buy success, order_id=%s, item_count=%d, total_price=%.2f, balance_before=%.2f, balance_after=%.2f",
+             order.order_id,
              item_count,
              total_price,
              balance_before,
