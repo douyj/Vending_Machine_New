@@ -1,5 +1,7 @@
 #include "ui/ui_login/ui_login_page.h"
 
+#include <stdio.h>
+
 #include "chinese/ui_fonts.h"
 #include "member/member_manager.h"
 #include "ui/ui_login/ui_register_page.h"
@@ -23,6 +25,7 @@ static lv_obj_t *username_input;
 static lv_obj_t *password_input;
 static lv_obj_t *status_label;
 static lv_obj_t *keyboard;
+static char pending_message[64];
 
 static lv_obj_t *create_label(lv_obj_t *parent, const char *text,
                               const lv_font_t *font, lv_color_t color)
@@ -296,6 +299,11 @@ static lv_obj_t *create_action_area(lv_obj_t *screen)
     lv_obj_set_size(status_label, UI_LOGIN_BUTTON_W, 22);
     lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(status_label, LV_ALIGN_CENTER, 0, 37);
+    if (pending_message[0] != '\0') {
+        lv_label_set_text(status_label, pending_message);
+        lv_obj_set_style_text_color(status_label, lv_color_hex(0x16A34A), 0);
+        pending_message[0] = '\0';
+    }
 
     lv_obj_t *login_btn = create_action_button(area, "会员登录",
                                                lv_color_hex(0x1677FF),
@@ -361,6 +369,22 @@ lv_obj_t *ui_login_page_create(void)
 
 void ui_login_page_load(void)
 {
+    pending_message[0] = '\0';
+
+    lv_scr_load_anim(ui_login_page_create(),
+                     LV_SCR_LOAD_ANIM_NONE,
+                     0,
+                     0,
+                     true);
+}
+
+void ui_login_page_load_with_message(const char *message)
+{
+    snprintf(pending_message,
+             sizeof(pending_message),
+             "%s",
+             message != NULL ? message : "");
+
     lv_scr_load_anim(ui_login_page_create(),
                      LV_SCR_LOAD_ANIM_NONE,
                      0,

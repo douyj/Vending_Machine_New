@@ -9,6 +9,7 @@ extern "C" {
 
 lv_obj_t *ui_login_page_create(void);
 void ui_login_page_load(void);
+void ui_login_page_load_with_message(const char *message);
 
 #ifdef __cplusplus
 }

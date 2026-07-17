@@ -8,6 +8,7 @@
 #include "chinese/ui_fonts.h"
 #include "member/member_manager.h"
 #include "product/product_manager.h"
+#include "ui/ui_login/ui_login_page.h"
 #include "ui/ui_order/ui_order_page.h"
 #include "ui/ui_shopping_car/ui_shopping_car_page.h"
 
@@ -505,6 +506,18 @@ static void order_btn_event_cb(lv_event_t *event)
     ui_order_page_load();
 }
 
+static void logout_btn_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    member_logout();
+    memset(quantities, 0, sizeof(quantities));
+    ui_shopping_cart_clear();
+    ui_login_page_load();
+}
+
 /*
     @brief 创建顶部导航栏
     @param parent 父对象
@@ -593,9 +606,28 @@ static void create_top_bar(lv_obj_t *parent)
                                          lv_color_hex(0xFFFFFF));
     lv_obj_center(order_label);
 
+    lv_obj_t *logout_btn = lv_btn_create(top_bar);
+    lv_obj_set_size(logout_btn, 58, 38);
+    lv_obj_align_to(logout_btn, order_btn, LV_ALIGN_OUT_LEFT_MID, -10, 0);
+    lv_obj_clear_flag(logout_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(logout_btn, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_opa(logout_btn, LV_OPA_20, 0);
+    lv_obj_set_style_radius(logout_btn, 19, 0);
+    lv_obj_set_style_border_color(logout_btn, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_border_opa(logout_btn, LV_OPA_50, 0);
+    lv_obj_set_style_border_width(logout_btn, 1, 0);
+    lv_obj_set_style_shadow_width(logout_btn, 0, 0);
+    lv_obj_set_style_pad_all(logout_btn, 0, 0);
+    lv_obj_add_event_cb(logout_btn, logout_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *logout_label = create_label(logout_btn, "退出",
+                                          ui_font_zh_16(),
+                                          lv_color_hex(0xFFFFFF));
+    lv_obj_center(logout_label);
+
     total_price_label = create_label(top_bar, "总价 0.00元",
                                      ui_font_zh_16(), lv_color_hex(0xFFFFFF));
-    lv_obj_align_to(total_price_label, order_btn, LV_ALIGN_OUT_LEFT_MID, -18, 0);
+    lv_obj_align_to(total_price_label, logout_btn, LV_ALIGN_OUT_LEFT_MID, -16, 0);
 }
 
 /*

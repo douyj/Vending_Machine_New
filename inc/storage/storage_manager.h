@@ -10,7 +10,8 @@ typedef enum {
     STORAGE_ERR_INVALID_PARAM = -1,
     STORAGE_ERR_OPEN_FAILED = -2,
     STORAGE_ERR_EXEC_FAILED = -3,
-    STORAGE_ERR_NOT_FOUND = -4
+    STORAGE_ERR_NOT_FOUND = -4,
+    STORAGE_ERR_ALREADY_EXISTS = -5
 } storage_err_t;
 
 
@@ -19,6 +20,10 @@ int storage_create_tables(void);
 int storage_close(void);
 
 int storage_insert_default_member(void);
+int storage_insert_member(const char *username,
+                          const char *password,
+                          const char *member_name,
+                          double balance);
 int storage_find_member_by_login(const char *username,
                                  const char *password,
                                  member_info_t *out_member);

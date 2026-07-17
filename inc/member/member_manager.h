@@ -15,7 +15,8 @@ typedef enum {
     MEMBER_ERR_BALANCE_NOT_ENOUGH = -3,
     MEMBER_ERR_ALREADY_LOGIN = -4,
     MEMBER_ERR_NOT_FOUND = -5,
-    MEMBER_ERR_STORAGE_FAILED = -6
+    MEMBER_ERR_STORAGE_FAILED = -6,
+    MEMBER_ERR_ALREADY_EXISTS = -7
 } member_err_t;
 
 
@@ -28,6 +29,9 @@ typedef struct {
 
 int member_manager_init(void);
 int member_login(const char *username, const char *password);
+int member_register(const char *username,
+                    const char *password,
+                    const char *member_name);
 int member_mock_login(void);
 int member_logout(void);
 int member_is_logged_in(void);

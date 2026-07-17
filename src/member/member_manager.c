@@ -63,6 +63,43 @@ int member_login(const char *username, const char *password)
 }
 
 /*
+    @brief 注册会员
+    @param username 账号
+    @param password 密码
+    @param member_name 会员姓名
+    @return MEMBER_ERR_OK 成功，其他失败
+*/
+int member_register(const char *username,
+                    const char *password,
+                    const char *member_name)
+{
+    int ret;
+
+    if (username == NULL || password == NULL || member_name == NULL ||
+        username[0] == '\0' || password[0] == '\0' || member_name[0] == '\0') {
+        LOG_WARN("member register invalid param");
+        return MEMBER_ERR_INVALID_PARAM;
+    }
+
+    ret = storage_insert_member(username, password, member_name, 1000.0);
+    if (ret == STORAGE_ERR_ALREADY_EXISTS) {
+        LOG_WARN("member register failed, username exists, username=%s", username);
+        return MEMBER_ERR_ALREADY_EXISTS;
+    }
+
+    if (ret != STORAGE_ERR_OK) {
+        LOG_WARN("member register failed, storage ret=%d", ret);
+        return MEMBER_ERR_STORAGE_FAILED;
+    }
+
+    LOG_INFO("member register success, username=%s, name=%s",
+             username,
+             member_name);
+
+    return MEMBER_ERR_OK;
+}
+
+/*
     @brief 模拟会员登录
     @return MEMBER_ERR_OK 成功
 */
@@ -271,6 +308,8 @@ const char *member_error_to_string(int err)
         return "NOT_FOUND";
     case MEMBER_ERR_STORAGE_FAILED:
         return "STORAGE_FAILED";
+    case MEMBER_ERR_ALREADY_EXISTS:
+        return "ALREADY_EXISTS";
     default:
         return "UNKNOWN";
     }

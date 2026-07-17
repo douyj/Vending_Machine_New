@@ -1,6 +1,7 @@
 #include "ui/ui_login/ui_register_page.h"
 
 #include "chinese/ui_fonts.h"
+#include "member/member_manager.h"
 #include "ui/ui_login/ui_login_page.h"
 
 #define UI_REGISTER_SCREEN_W       800
@@ -12,10 +13,17 @@
 #define UI_REGISTER_PREVIEW_H      330
 #define UI_REGISTER_RIGHT_W        216
 #define UI_REGISTER_INPUT_W        204
-#define UI_REGISTER_INPUT_H        58
+#define UI_REGISTER_INPUT_H        44
 #define UI_REGISTER_BUTTON_W       204
-#define UI_REGISTER_BUTTON_H       76
-#define UI_REGISTER_BACK_BUTTON_H  46
+#define UI_REGISTER_BUTTON_H       42
+#define UI_REGISTER_BACK_BUTTON_H  40
+#define UI_REGISTER_KEYBOARD_H     180
+
+static lv_obj_t *username_input;
+static lv_obj_t *password_input;
+static lv_obj_t *name_input;
+static lv_obj_t *status_label;
+static lv_obj_t *keyboard;
 
 static lv_obj_t *create_label(lv_obj_t *parent, const char *text,
                               const lv_font_t *font, lv_color_t color)
@@ -116,25 +124,52 @@ static lv_obj_t *create_camera_area(lv_obj_t *screen)
     return area;
 }
 
-static lv_obj_t *create_face_button(lv_obj_t *parent)
+static lv_obj_t *create_action_button(lv_obj_t *parent,
+                                      const char *text,
+                                      lv_color_t bg_color,
+                                      lv_color_t text_color,
+                                      lv_color_t border_color)
 {
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_size(btn, UI_REGISTER_BUTTON_W, UI_REGISTER_BUTTON_H);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x22A55A), 0);
+    lv_obj_set_style_bg_color(btn, bg_color, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn, 12, 0);
-    lv_obj_set_style_border_color(btn, lv_color_hex(0x22A55A), 0);
+    lv_obj_set_style_radius(btn, 10, 0);
+    lv_obj_set_style_border_color(btn, border_color, 0);
     lv_obj_set_style_border_width(btn, 1, 0);
-    lv_obj_set_style_shadow_width(btn, 10, 0);
+    lv_obj_set_style_shadow_width(btn, 6, 0);
     lv_obj_set_style_shadow_opa(btn, LV_OPA_10, 0);
-    lv_obj_set_style_shadow_ofs_y(btn, 4, 0);
+    lv_obj_set_style_shadow_ofs_y(btn, 3, 0);
 
-    lv_obj_t *label = create_label(btn, "人脸录入", ui_font_zh_16(),
-                                   lv_color_hex(0xFFFFFF));
+    lv_obj_t *label = create_label(btn, text, ui_font_zh_16(), text_color);
     lv_obj_center(label);
 
     return btn;
+}
+
+static lv_obj_t *create_register_input(lv_obj_t *parent,
+                                       const char *placeholder,
+                                       bool password_mode)
+{
+    lv_obj_t *input = lv_textarea_create(parent);
+    lv_obj_set_size(input, UI_REGISTER_INPUT_W, UI_REGISTER_INPUT_H);
+    lv_textarea_set_one_line(input, true);
+    lv_textarea_set_placeholder_text(input, placeholder);
+    lv_textarea_set_max_length(input, 24);
+    lv_textarea_set_password_mode(input, password_mode);
+    lv_obj_set_style_text_font(input, ui_font_zh_16(), 0);
+    lv_obj_set_style_text_font(input, ui_font_zh_16(), LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_text_color(input, lv_color_hex(0x111827), 0);
+    lv_obj_set_style_text_color(input, lv_color_hex(0x9CA3AF),
+                                LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_bg_color(input, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_border_color(input, lv_color_hex(0xD7DEE8), 0);
+    lv_obj_set_style_border_width(input, 1, 0);
+    lv_obj_set_style_radius(input, 10, 0);
+    lv_obj_set_style_pad_left(input, 12, 0);
+    lv_obj_set_style_pad_right(input, 12, 0);
+    return input;
 }
 
 static lv_obj_t *create_back_button(lv_obj_t *parent)
@@ -159,7 +194,90 @@ static lv_obj_t *create_back_button(lv_obj_t *parent)
 static void back_btn_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        if (keyboard != NULL) {
+            lv_keyboard_set_textarea(keyboard, NULL);
+            lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+        }
         ui_login_page_load();
+    }
+}
+
+static void hide_keyboard(void)
+{
+    if (keyboard == NULL) {
+        return;
+    }
+
+    lv_keyboard_set_textarea(keyboard, NULL);
+    lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void input_event_cb(lv_event_t *event)
+{
+    lv_event_code_t code = lv_event_get_code(event);
+    lv_obj_t *input = lv_event_get_target(event);
+
+    if (keyboard == NULL) {
+        return;
+    }
+
+    if (code == LV_EVENT_FOCUSED || code == LV_EVENT_CLICKED) {
+        lv_keyboard_set_textarea(keyboard, input);
+        lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+        lv_obj_clear_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(keyboard);
+    }
+}
+
+static void keyboard_event_cb(lv_event_t *event)
+{
+    lv_event_code_t code = lv_event_get_code(event);
+
+    if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+        hide_keyboard();
+    }
+}
+
+static void face_btn_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    hide_keyboard();
+    lv_label_set_text(status_label, "人脸录入功能待接入");
+}
+
+static void register_btn_event_cb(lv_event_t *event)
+{
+    const char *username;
+    const char *password;
+    const char *name;
+    int ret;
+
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    hide_keyboard();
+
+    username = lv_textarea_get_text(username_input);
+    password = lv_textarea_get_text(password_input);
+    name = lv_textarea_get_text(name_input);
+
+    ret = member_register(username, password, name);
+    if (ret == MEMBER_ERR_OK) {
+        lv_label_set_text(status_label, "");
+        ui_login_page_load_with_message("注册成功");
+        return;
+    }
+
+    if (ret == MEMBER_ERR_ALREADY_EXISTS) {
+        lv_label_set_text(status_label, "账号已存在");
+    } else if (ret == MEMBER_ERR_INVALID_PARAM) {
+        lv_label_set_text(status_label, "请填写完整信息");
+    } else {
+        lv_label_set_text(status_label, "注册失败");
     }
 }
 
@@ -173,38 +291,78 @@ static lv_obj_t *create_action_area(lv_obj_t *screen)
 
     lv_obj_t *title = create_label(area, "会员注册", ui_font_zh_16(),
                                    lv_color_hex(0x111827));
-    lv_obj_align(title, LV_ALIGN_CENTER, 0, -116);
+    lv_obj_align(title, LV_ALIGN_CENTER, 0, -188);
+
+    lv_obj_t *username_label = create_label(area, "账号", ui_font_zh_16(),
+                                            lv_color_hex(0x374151));
+    lv_obj_align(username_label, LV_ALIGN_CENTER, 0, -158);
+
+    username_input = create_register_input(area, "请输入账号", false);
+    lv_obj_align(username_input, LV_ALIGN_CENTER, 0, -126);
+    lv_obj_add_event_cb(username_input, input_event_cb, LV_EVENT_FOCUSED, NULL);
+    lv_obj_add_event_cb(username_input, input_event_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *password_label = create_label(area, "密码", ui_font_zh_16(),
+                                            lv_color_hex(0x374151));
+    lv_obj_align(password_label, LV_ALIGN_CENTER, 0, -92);
+
+    password_input = create_register_input(area, "请输入密码", true);
+    lv_obj_align(password_input, LV_ALIGN_CENTER, 0, -60);
+    lv_obj_add_event_cb(password_input, input_event_cb, LV_EVENT_FOCUSED, NULL);
+    lv_obj_add_event_cb(password_input, input_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *name_label = create_label(area, "姓名", ui_font_zh_16(),
                                         lv_color_hex(0x374151));
-    lv_obj_align(name_label, LV_ALIGN_CENTER, 0, -72);
+    lv_obj_align(name_label, LV_ALIGN_CENTER, 0, -26);
 
-    lv_obj_t *name_input = lv_textarea_create(area);
-    lv_obj_set_size(name_input, UI_REGISTER_INPUT_W, UI_REGISTER_INPUT_H);
-    lv_obj_align(name_input, LV_ALIGN_CENTER, 0, -28);
-    lv_textarea_set_one_line(name_input, true);
-    lv_textarea_set_placeholder_text(name_input, "请输入姓名");
+    name_input = create_register_input(area, "请输入姓名", false);
     lv_textarea_set_max_length(name_input, 16);
-    lv_obj_set_style_text_font(name_input, ui_font_zh_16(), 0);
-    lv_obj_set_style_text_font(name_input, ui_font_zh_16(), LV_PART_TEXTAREA_PLACEHOLDER);
-    lv_obj_set_style_text_color(name_input, lv_color_hex(0x111827), 0);
-    lv_obj_set_style_text_color(name_input, lv_color_hex(0x9CA3AF),
-                                LV_PART_TEXTAREA_PLACEHOLDER);
-    lv_obj_set_style_bg_color(name_input, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_border_color(name_input, lv_color_hex(0xD7DEE8), 0);
-    lv_obj_set_style_border_width(name_input, 1, 0);
-    lv_obj_set_style_radius(name_input, 10, 0);
-    lv_obj_set_style_pad_left(name_input, 14, 0);
-    lv_obj_set_style_pad_right(name_input, 14, 0);
+    lv_obj_align(name_input, LV_ALIGN_CENTER, 0, 6);
+    lv_obj_add_event_cb(name_input, input_event_cb, LV_EVENT_FOCUSED, NULL);
+    lv_obj_add_event_cb(name_input, input_event_cb, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_t *face_btn = create_face_button(area);
-    lv_obj_align(face_btn, LV_ALIGN_CENTER, 0, 58);
+    status_label = create_label(area, "", ui_font_zh_12(),
+                                lv_color_hex(0xDC2626));
+    lv_obj_set_size(status_label, UI_REGISTER_BUTTON_W, 22);
+    lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(status_label, LV_ALIGN_CENTER, 0, 40);
+
+    lv_obj_t *register_btn = create_action_button(area, "完成注册",
+                                                  lv_color_hex(0x1677FF),
+                                                  lv_color_hex(0xFFFFFF),
+                                                  lv_color_hex(0x1677FF));
+    lv_obj_align(register_btn, LV_ALIGN_CENTER, 0, 78);
+    lv_obj_add_event_cb(register_btn, register_btn_event_cb,
+                        LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *face_btn = create_action_button(area, "人脸录入",
+                                              lv_color_hex(0x7C3AED),
+                                              lv_color_hex(0xFFFFFF),
+                                              lv_color_hex(0x7C3AED));
+    lv_obj_align(face_btn, LV_ALIGN_CENTER, 0, 126);
+    lv_obj_add_event_cb(face_btn, face_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *back_btn = create_back_button(area);
-    lv_obj_align(back_btn, LV_ALIGN_BOTTOM_MID, 0, -18);
+    lv_obj_align(back_btn, LV_ALIGN_CENTER, 0, 176);
     lv_obj_add_event_cb(back_btn, back_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
     return area;
+}
+
+static void create_keyboard(lv_obj_t *screen)
+{
+    keyboard = lv_keyboard_create(screen);
+    lv_obj_set_size(keyboard, UI_REGISTER_SCREEN_W, UI_REGISTER_KEYBOARD_H);
+    lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+    lv_obj_set_style_bg_color(keyboard, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_bg_opa(keyboard, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(keyboard, lv_color_hex(0xD7DEE8), 0);
+    lv_obj_set_style_border_width(keyboard, 1, 0);
+    lv_obj_set_style_text_font(keyboard, &lv_font_montserrat_14, 0);
+    lv_obj_add_event_cb(keyboard, keyboard_event_cb, LV_EVENT_READY, NULL);
+    lv_obj_add_event_cb(keyboard, keyboard_event_cb, LV_EVENT_CANCEL, NULL);
+    lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
 }
 
 lv_obj_t *ui_register_page_create(void)
@@ -216,8 +374,15 @@ lv_obj_t *ui_register_page_create(void)
     style_plain_bg(screen, lv_color_hex(0xFFFFFF));
     lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
+    username_input = NULL;
+    password_input = NULL;
+    name_input = NULL;
+    status_label = NULL;
+    keyboard = NULL;
+
     create_camera_area(screen);
     create_action_area(screen);
+    create_keyboard(screen);
 
     return screen;
 }

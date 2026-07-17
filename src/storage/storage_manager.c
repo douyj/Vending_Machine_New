@@ -169,6 +169,61 @@ int storage_insert_default_member(void)
 }
 
 /*
+    @brief 插入新会员
+    @param username 账号
+    @param password 密码
+    @param member_name 会员姓名
+    @param balance 初始余额
+    @return 存储错误码
+*/
+int storage_insert_member(const char *username,
+                          const char *password,
+                          const char *member_name,
+                          double balance)
+{
+    sqlite3_stmt *stmt = NULL;
+    int step_ret;
+    const char *sql =
+        "INSERT INTO members ("
+        "username, password, member_name, balance, create_time, update_time"
+        ") VALUES (?, ?, ?, ?, strftime('%s','now'), strftime('%s','now'));";
+
+    if (username == NULL || password == NULL ||
+        member_name == NULL || balance < 0.0) {
+        return STORAGE_ERR_INVALID_PARAM;
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        LOG_ERROR("prepare insert member failed: %s", sqlite3_errmsg(g_db));
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, password, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, member_name, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(stmt, 4, balance);
+
+    step_ret = sqlite3_step(stmt);
+    if (step_ret == SQLITE_CONSTRAINT) {
+        sqlite3_finalize(stmt);
+        return STORAGE_ERR_ALREADY_EXISTS;
+    }
+
+    if (step_ret != SQLITE_DONE) {
+        LOG_ERROR("insert member failed: %s", sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        return STORAGE_ERR_EXEC_FAILED;
+    }
+
+    sqlite3_finalize(stmt);
+    LOG_INFO("insert member success, username=%s, name=%s, balance=%.2f",
+             username,
+             member_name,
+             balance);
+    return STORAGE_ERR_OK;
+}
+
+/*
     @brief 根据账号密码查询会员
     @param username 账号
     @param password 密码
@@ -595,6 +650,8 @@ const char *storage_error_to_string(int err)
         return "EXEC_FAILED";
     case STORAGE_ERR_NOT_FOUND:
         return "NOT_FOUND";
+    case STORAGE_ERR_ALREADY_EXISTS:
+        return "ALREADY_EXISTS";
     default:
         return "UNKNOWN";
     }
