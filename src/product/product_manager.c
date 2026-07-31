@@ -209,6 +209,7 @@ int product_manager_set_stock(int product_id, int stock)
     for(int i = 0; i < g_product_count; i++){
         if(g_products[i].product_id == product_id){
             g_products[i].product_stock = stock;
+            storage_insert_or_update_product(&g_products[i]);
             pthread_mutex_unlock(&g_product_mutex);
 
             LOG_INFO("set stock success, product_id=%d, stock=%d",
@@ -240,6 +241,7 @@ int product_manager_add_stock(int product_id, int count)
     for(int i = 0; i < g_product_count; i++){
         if(g_products[i].product_id == product_id){
             g_products[i].product_stock += count;
+            storage_insert_or_update_product(&g_products[i]);
             LOG_INFO("add stock success, product_id=%d, add=%d, stock=%d",
                      product_id, count, g_products[i].product_stock);
             pthread_mutex_unlock(&g_product_mutex);

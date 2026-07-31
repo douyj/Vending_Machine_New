@@ -28,6 +28,8 @@ add_executable(Vending_Machine
     src/device/door_manager.c
     src/device/door_state.c
     src/storage/storage_manager.c
+    src/net/json_protocol.c
+    src/net/tcp_client.c
     src/app/app_state.c
     src/app/app_main.c
     src/ui/ui_login/ui_login_page.c
@@ -38,6 +40,7 @@ add_executable(Vending_Machine
     src/chinese/font_chinese_12.c
     src/chinese/font_chinese_16.c
     src/chinese/ui_fonts.c
+    third_party/cJSON.c
     third_party/lv_drivers/sdl/sdl.c
     third_party/lv_drivers/sdl/sdl_common.c
 )

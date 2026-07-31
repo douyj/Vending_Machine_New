@@ -6,7 +6,12 @@
 #include "member/member_manager.h"
 #include "order/order_manager.h"
 #include "storage/storage_manager.h"
+#include "device/door_manager.h"
+#include "net/tcp_client.h"
 #include "ui/ui_login/ui_login_page.h"
+
+#define QT_BACKEND_IP "127.0.0.1"
+#define QT_BACKEND_PORT 9000
 
 int main(void)
 {
@@ -20,6 +25,8 @@ int main(void)
     product_manager_init();     //对商品进行初始化
     member_manager_init();      //对会员进行初始化
     order_manager_init();       //对订单进行初始化
+    door_manager_init();        //对柜门状态进行初始化
+    tcp_client_start(QT_BACKEND_IP, QT_BACKEND_PORT); //连接 Qt 后台
 
 
     lv_disp_draw_buf_init(&draw_buf, buf, NULL, SDL_HOR_RES * 80);
@@ -46,6 +53,7 @@ int main(void)
         lv_tick_inc(5);
     }
 
+    tcp_client_stop();
     storage_close();
 
     return 0;
