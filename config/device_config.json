@@ -1,0 +1,11 @@
+{
+  "device_id": "VM001",
+  "device_name": "Vending Machine 001",
+  "server": {
+    "tcp_host": "127.0.0.1",
+    "tcp_port": 9000
+  },
+  "storage": {
+    "db_path": "vending_machine.db"
+  }
+}

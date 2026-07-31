@@ -14,6 +14,18 @@ typedef enum {
     JSON_PROTO_ERR_INTERNAL = -4
 } json_proto_error_t;
 
+typedef struct {
+    int product_id;
+    char product_name[PRODUCT_NAME_MAX_LEN];
+    double price;
+    int quantity;
+} json_protocol_order_item_t;
+
+typedef struct {
+    int product_id;
+    int stock;
+} json_protocol_stock_item_t;
+
 /*
  * @brief 处理 Qt 后台发来的完整 JSON 请求
  *
@@ -30,7 +42,13 @@ char *json_protocol_handle_request(const char *request_json);
  */
 char *json_protocol_build_heartbeat(void);
 char *json_protocol_build_order_created(const order_info_t *order);
+char *json_protocol_build_cart_paid(const json_protocol_order_item_t *items,
+                                    int item_count,
+                                    double total_price,
+                                    double balance_after);
 char *json_protocol_build_stock_changed(int product_id, int stock);
+char *json_protocol_build_stock_batch_changed(const json_protocol_stock_item_t *items,
+                                              int item_count);
 
 /*
  * @brief 释放 json_protocol 模块返回的 JSON 字符串

@@ -1,6 +1,7 @@
 #include "ui/ui_shopping/ui_shopping_page.h"
 
 #include <stdbool.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -39,6 +40,27 @@ static lv_obj_t *product_grid;
 static lv_obj_t *total_price_label;
 static lv_obj_t *balance_label;
 static shopping_category_t selected_category = SHOPPING_CATEGORY_ALL;
+static int page_active = 0;
+static int refresh_requested = 0;
+static pthread_mutex_t refresh_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/*
+    @brief 购物页面删除事件回调
+    @note 页面被切走并删除后，清空 LVGL 对象指针，避免后续误刷新
+*/
+static void shopping_page_delete_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_DELETE) {
+        return;
+    }
+
+    page_active = 0;
+    product_grid = NULL;
+    total_price_label = NULL;
+    balance_label = NULL;
+    memset(category_labels, 0, sizeof(category_labels));
+    memset(quantity_labels, 0, sizeof(quantity_labels));
+}
 
 /*
     @brief 设置对象的背景颜色为纯色，不透明度为100%，边框宽度为0，圆角为0，内边距为0
@@ -421,6 +443,42 @@ static void load_products(void)
 }
 
 /*
+    @brief 请求刷新购物页面商品库存
+    @note 可以由 TCP 线程调用，只设置标志，不直接操作 LVGL
+*/
+void ui_shopping_page_request_refresh(void)
+{
+    pthread_mutex_lock(&refresh_mutex);
+    refresh_requested = 1;
+    pthread_mutex_unlock(&refresh_mutex);
+}
+
+/*
+    @brief 在 LVGL 主线程中执行购物页面刷新
+    @note main 循环定期调用，避免 TCP 线程直接刷新 LVGL 控件
+*/
+void ui_shopping_page_poll_refresh(void)
+{
+    int need_refresh = 0;
+
+    pthread_mutex_lock(&refresh_mutex);
+    if (refresh_requested) {
+        refresh_requested = 0;
+        need_refresh = 1;
+    }
+    pthread_mutex_unlock(&refresh_mutex);
+
+    if (!need_refresh || !page_active || product_grid == NULL) {
+        return;
+    }
+
+    load_products();
+    refresh_product_grid();
+    update_total_price_label();
+    update_balance_label();
+}
+
+/*
     @brief 获取购物车中的商品项
     @param out_items 输出商品项数组
     @param max_count 最大商品项数量
@@ -728,8 +786,10 @@ lv_obj_t *ui_shopping_page_create(void)
     lv_obj_set_size(screen, UI_SHOPPING_SCREEN_W, UI_SHOPPING_SCREEN_H);
     style_plain_bg(screen, lv_color_hex(0xF8FAFC));
     lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(screen, shopping_page_delete_event_cb, LV_EVENT_DELETE, NULL);
 
     selected_category = SHOPPING_CATEGORY_ALL;
+    page_active = 1;
     product_grid = NULL;
     total_price_label = NULL;
     balance_label = NULL;

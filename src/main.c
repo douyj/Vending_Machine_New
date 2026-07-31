@@ -2,6 +2,7 @@
 #include "sdl/sdl.h"
 #include <SDL2/SDL.h>
 
+#include "app/app_config.h"
 #include "product/product_manager.h"
 #include "member/member_manager.h"
 #include "order/order_manager.h"
@@ -9,24 +10,27 @@
 #include "device/door_manager.h"
 #include "net/tcp_client.h"
 #include "ui/ui_login/ui_login_page.h"
+#include "ui/ui_shopping/ui_shopping_page.h"
 
-#define QT_BACKEND_IP "127.0.0.1"
-#define QT_BACKEND_PORT 9000
+#define APP_CONFIG_PATH "config/device_config.json"
 
 int main(void)
 {
     static lv_disp_draw_buf_t draw_buf;
     static lv_color_t buf[SDL_HOR_RES * 80];
+    const app_config_t *config;
 
+    app_config_load(APP_CONFIG_PATH);
+    config = app_config_get();
     lv_init();
     sdl_init();
-    storage_manager_init("vending_machine.db");
+    storage_manager_init(config->db_path);
     storage_create_tables();
     product_manager_init();     //对商品进行初始化
     member_manager_init();      //对会员进行初始化
     order_manager_init();       //对订单进行初始化
     door_manager_init();        //对柜门状态进行初始化
-    tcp_client_start(QT_BACKEND_IP, QT_BACKEND_PORT); //连接 Qt 后台
+    tcp_client_start(config->tcp_host, config->tcp_port); //连接 Qt 后台
 
 
     lv_disp_draw_buf_init(&draw_buf, buf, NULL, SDL_HOR_RES * 80);
@@ -48,6 +52,7 @@ int main(void)
     ui_login_page_load();
 
     while (!sdl_quit_qry) {
+        ui_shopping_page_poll_refresh();
         lv_timer_handler();
         SDL_Delay(5);
         lv_tick_inc(5);

@@ -3,6 +3,9 @@
 #include <stdio.h>
 
 #include "chinese/ui_fonts.h"
+#include "log/log.h"
+#include "net/json_protocol.h"
+#include "net/tcp_client.h"
 #include "order/order_manager.h"
 #include "ui/ui_shopping/ui_shopping_page.h"
 
@@ -17,6 +20,52 @@ static lv_obj_t *total_price_label;
 static lv_obj_t *status_label;
 static lv_obj_t *pay_dialog_overlay;
 static lv_timer_t *pay_dialog_timer;
+
+/*
+    @brief 批量上报购物车商品的最新库存
+    @param items 购物车商品数组
+    @param item_count 购物车商品数量
+*/
+static void upload_stock_batch_changed(const ui_shopping_cart_item_t *items,
+                                       int item_count)
+{
+    json_protocol_stock_item_t stock_items[UI_SHOPPING_CART_MAX_ITEMS];
+    product_info_t product;
+    char *stock_json;
+    int stock_count = 0;
+
+    if (items == NULL || item_count <= 0) {
+        return;
+    }
+
+    for (int i = 0; i < item_count && stock_count < UI_SHOPPING_CART_MAX_ITEMS; i++) {
+        if (product_manager_get_by_id(items[i].product.product_id, &product) != 0) {
+            LOG_WARN("upload stock batch changed skip product, product_id=%d",
+                     items[i].product.product_id);
+            continue;
+        }
+
+        stock_items[stock_count].product_id = product.product_id;
+        stock_items[stock_count].stock = product.product_stock;
+        stock_count++;
+    }
+
+    if (stock_count <= 0) {
+        return;
+    }
+
+    stock_json = json_protocol_build_stock_batch_changed(stock_items, stock_count);
+    if (stock_json == NULL) {
+        LOG_WARN("build stock batch changed json failed");
+        return;
+    }
+
+    if (tcp_client_send_json(stock_json) != 0) {
+        LOG_WARN("upload stock batch changed event failed");
+    }
+
+    json_protocol_free(stock_json);
+}
 
 /*
     @brief 设置对象的背景颜色为纯色
@@ -295,6 +344,7 @@ static void pay_btn_event_cb(lv_event_t *event)
 {
     ui_shopping_cart_item_t items[UI_SHOPPING_CART_MAX_ITEMS];
     order_cart_item_t cart_items[UI_SHOPPING_CART_MAX_ITEMS];
+    json_protocol_order_item_t upload_items[UI_SHOPPING_CART_MAX_ITEMS];
     char message[96];
     double paid_total = 0.0;
     double balance_after = 0.0;
@@ -315,11 +365,32 @@ static void pay_btn_event_cb(lv_event_t *event)
     for (int i = 0; i < item_count; i++) {
         cart_items[i].product_id = items[i].product.product_id;
         cart_items[i].quantity = items[i].quantity;
+
+        upload_items[i].product_id = items[i].product.product_id;
+        snprintf(upload_items[i].product_name,
+                 sizeof(upload_items[i].product_name),
+                 "%s",
+                 items[i].product.product_name);
+        upload_items[i].price = items[i].product.product_price;
+        upload_items[i].quantity = items[i].quantity;
     }
 
     ret = order_process_cart_buy(cart_items, item_count,
                                  &paid_total, &balance_after);
     if (ret == ORDER_ERR_OK) {
+        char *upload_json = json_protocol_build_cart_paid(upload_items,
+                                                          item_count,
+                                                          paid_total,
+                                                          balance_after);
+        if (upload_json != NULL) {
+            if (tcp_client_send_json(upload_json) != 0) {
+                LOG_WARN("upload cart paid event failed");
+            }
+            json_protocol_free(upload_json);
+        }
+
+        upload_stock_batch_changed(items, item_count);
+
         ui_shopping_cart_clear();
         refresh_cart_list();
         update_total_price_label();

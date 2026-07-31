@@ -30,6 +30,7 @@ add_executable(Vending_Machine
     src/storage/storage_manager.c
     src/net/json_protocol.c
     src/net/tcp_client.c
+    src/app/app_config.c
     src/app/app_state.c
     src/app/app_main.c
     src/ui/ui_login/ui_login_page.c

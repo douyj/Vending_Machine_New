@@ -17,6 +17,8 @@ extern "C" {
 
 lv_obj_t *ui_shopping_page_create(void);
 void ui_shopping_page_load(void);
+void ui_shopping_page_request_refresh(void);
+void ui_shopping_page_poll_refresh(void);
 int ui_shopping_cart_get_items(ui_shopping_cart_item_t *out_items, int max_count);
 double ui_shopping_cart_get_total_price(void);
 void ui_shopping_cart_clear(void);

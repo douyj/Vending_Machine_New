@@ -1,10 +1,12 @@
 #include "net/json_protocol.h"
 
+#include "app/app_config.h"
 #include "device/door_manager.h"
 #include "device/door_state.h"
 #include "member/member_manager.h"
 #include "product/product_manager.h"
 #include "third_party/cJSON.h"
+#include "ui/ui_shopping/ui_shopping_page.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +34,7 @@ static cJSON *create_base_message(const char *type, int seq, const char *cmd)
     cJSON_AddStringToObject(root, "type", type);
     cJSON_AddNumberToObject(root, "seq", seq);
     cJSON_AddStringToObject(root, "cmd", cmd);
-    cJSON_AddStringToObject(root, "device_id", JSON_PROTOCOL_DEVICE_ID);
+    cJSON_AddStringToObject(root, "device_id", app_config_get_device_id());
 
     return root;
 }
@@ -238,7 +240,16 @@ static char *handle_product_update_stock(int seq, cJSON *data)
         return build_response(seq, "product.update_stock", JSON_PROTO_ERR_INTERNAL, "set stock failed", NULL);
     }
 
-    return build_response(seq, "product.update_stock", JSON_PROTO_OK, "ok", NULL);
+    data = cJSON_CreateObject();
+    if (data == NULL) {
+        return build_response(seq, "product.update_stock", JSON_PROTO_ERR_INTERNAL, "internal error", NULL);
+    }
+
+    cJSON_AddNumberToObject(data, "product_id", product_id);
+    cJSON_AddNumberToObject(data, "stock", stock);
+    ui_shopping_page_request_refresh();
+
+    return build_response(seq, "product.update_stock", JSON_PROTO_OK, "ok", data);
 }
 
 /*
@@ -413,6 +424,60 @@ char *json_protocol_build_order_created(const order_info_t *order)
 }
 
 /*
+ * @brief 构造购物车支付成功后的上报事件
+ */
+char *json_protocol_build_cart_paid(const json_protocol_order_item_t *items,
+                                    int item_count,
+                                    double total_price,
+                                    double balance_after)
+{
+    cJSON *root;
+    cJSON *data;
+    cJSON *array;
+    int i;
+
+    if (items == NULL || item_count <= 0) {
+        return NULL;
+    }
+
+    root = create_base_message("event", g_event_seq++, "order.cart_paid");
+    data = cJSON_CreateObject();
+    array = cJSON_CreateArray();
+
+    if (root == NULL || data == NULL || array == NULL) {
+        cJSON_Delete(root);
+        cJSON_Delete(data);
+        cJSON_Delete(array);
+        return NULL;
+    }
+
+    for (i = 0; i < item_count; i++) {
+        cJSON *item = cJSON_CreateObject();
+        if (item == NULL) {
+            cJSON_Delete(root);
+            cJSON_Delete(data);
+            cJSON_Delete(array);
+            return NULL;
+        }
+
+        cJSON_AddNumberToObject(item, "product_id", items[i].product_id);
+        cJSON_AddStringToObject(item, "product_name", items[i].product_name);
+        cJSON_AddNumberToObject(item, "price", items[i].price);
+        cJSON_AddNumberToObject(item, "quantity", items[i].quantity);
+        cJSON_AddNumberToObject(item, "subtotal", items[i].price * items[i].quantity);
+        cJSON_AddItemToArray(array, item);
+    }
+
+    cJSON_AddNumberToObject(data, "total_price", total_price);
+    cJSON_AddNumberToObject(data, "balance_after", balance_after);
+    cJSON_AddNumberToObject(data, "timestamp", (double)time(NULL));
+    cJSON_AddItemToObject(data, "items", array);
+    cJSON_AddItemToObject(root, "data", data);
+
+    return print_and_delete(root);
+}
+
+/*
  * @brief 构造库存变化上报事件
  */
 char *json_protocol_build_stock_changed(int product_id, int stock)
@@ -429,6 +494,53 @@ char *json_protocol_build_stock_changed(int product_id, int stock)
     cJSON_AddNumberToObject(data, "product_id", product_id);
     cJSON_AddNumberToObject(data, "stock", stock);
     cJSON_AddNumberToObject(data, "timestamp", (double)time(NULL));
+    cJSON_AddItemToObject(root, "data", data);
+
+    return print_and_delete(root);
+}
+
+/*
+ * @brief 构造批量库存变化上报事件
+ */
+char *json_protocol_build_stock_batch_changed(const json_protocol_stock_item_t *items,
+                                              int item_count)
+{
+    cJSON *root;
+    cJSON *data;
+    cJSON *array;
+    int i;
+
+    if (items == NULL || item_count <= 0) {
+        return NULL;
+    }
+
+    root = create_base_message("event", g_event_seq++, "product.stock_batch_changed");
+    data = cJSON_CreateObject();
+    array = cJSON_CreateArray();
+
+    if (root == NULL || data == NULL || array == NULL) {
+        cJSON_Delete(root);
+        cJSON_Delete(data);
+        cJSON_Delete(array);
+        return NULL;
+    }
+
+    for (i = 0; i < item_count; i++) {
+        cJSON *item = cJSON_CreateObject();
+        if (item == NULL) {
+            cJSON_Delete(root);
+            cJSON_Delete(data);
+            cJSON_Delete(array);
+            return NULL;
+        }
+
+        cJSON_AddNumberToObject(item, "product_id", items[i].product_id);
+        cJSON_AddNumberToObject(item, "stock", items[i].stock);
+        cJSON_AddItemToArray(array, item);
+    }
+
+    cJSON_AddNumberToObject(data, "timestamp", (double)time(NULL));
+    cJSON_AddItemToObject(data, "items", array);
     cJSON_AddItemToObject(root, "data", data);
 
     return print_and_delete(root);
